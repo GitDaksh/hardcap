@@ -250,12 +250,9 @@ function updateLane(lane, p) {
     h("span", {}, "Held now ", h("b", { text: usd(p.reserved_micros) })),
   ];
   if (s) {
-    parts.push(
-      h("span", { class: s.running ? "live" : "" }, s.running ? "Stampede running" : "Last stampede"),
-      h("span", {}, "Served ", h("b", { text: count(s.ok) })),
-      h("span", {}, "Refused ", h("b", { text: count(s.refused) })),
-    );
-    if (s.failed) parts.push(h("span", {}, "Failed ", h("b", { text: count(s.failed) })));
+    const tally = [h("b", { text: count(s.ok) }), " served, ", h("b", { text: count(s.refused) }), " refused"];
+    if (s.failed) tally.push(", ", h("b", { text: count(s.failed) }), " failed");
+    parts.push(h("span", { class: s.running ? "live" : "" }, s.running ? "Stampede running: " : "Last stampede: ", ...tally));
   }
   lane.stats.replaceChildren(...parts);
 }

@@ -23,6 +23,10 @@
 
 * { box-sizing: border-box; }
 
+/* Elements below set their own display (grid, flex), which would otherwise
+   beat the hidden attribute and leave hidden things on screen. */
+[hidden] { display: none !important; }
+
 html { background: var(--bg); }
 
 body {
@@ -125,6 +129,7 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 6px; }
 }
 
 .lanes { border-top: 1px solid var(--line); }
+.lanes:empty { display: none; }
 .lane {
   padding: 18px 4px;
   border-bottom: 1px solid var(--line);
@@ -179,7 +184,16 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 6px; }
   box-shadow: 0 0 0 3px var(--bg);
 }
 
-.lane-stats { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+/* The stats stay left of the cap wall, so the wall never cuts through text. */
+.lane-stats {
+  display: flex;
+  gap: 4px 18px;
+  flex-wrap: wrap;
+  max-width: calc(var(--cap-at) - 14px);
+  font-size: 13px;
+  color: var(--muted);
+}
+.lane-stats > span { white-space: nowrap; }
 .lane-stats b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 .lane-stats .live { color: var(--brass); }
 .lane-stats .live::before {
@@ -270,12 +284,18 @@ dialog::backdrop { background: rgba(10, 11, 13, 0.6); }
 
 /* Small screens: name and readout share a row, the meter gets full width. */
 @media (max-width: 760px) {
-  .top { padding: 14px 16px; }
+  .top { padding: 14px 16px; gap: 12px 16px; }
+  .top-actions { margin-left: 0; width: 100%; gap: 8px; }
+  .top-actions button { padding: 7px 11px; font-size: 13px; }
+  .top-actions .status:not(:empty) { flex-basis: 100%; }
+  #disconnect { margin-left: auto; }
   main { padding: 20px 16px 60px; }
   .lanes-head { display: none; }
+  .lanes { border-top: 0; }
   .lane { grid-template-columns: 1fr auto; row-gap: 14px; }
   .meter { grid-column: 1 / -1; grid-row: 2; }
   .cap-wall { top: -6px; bottom: -6px; }
+  .lane-stats { max-width: none; }
   .detail-grid { grid-template-columns: 1fr; }
   .detail-head .row { margin-left: 0; }
 }
