@@ -1,0 +1,19 @@
+# Binaries built with `go build`
+/bin/
+/hardcap
+/mockllm
+
+# Test and coverage output
+*.test
+*.out
+coverage.html
+
+# Local secrets: never commit real API keys
+.env
+.env.*
+!.env.example
+
+# Editor and macOS clutter
+.vscode/
+.idea/
+.DS_Store
