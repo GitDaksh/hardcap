@@ -197,7 +197,7 @@ func (l *Ledger) ResetSpend(ctx context.Context, id int64) error {
 		// Keys before the project, in id order: the same lock order as
 		// everything else, so a reset can't deadlock with live traffic.
 		if _, err := tx.Exec(ctx, `UPDATE api_keys SET spent_micros = 0 WHERE id IN (
-			SELECT id FROM api_keys WHERE project_id = $1 ORDER BY id FOR UPDATE)`, id); err != nil {
+			SELECT id FROM api_keys WHERE project_id = $1 ORDER BY id FOR NO KEY UPDATE)`, id); err != nil {
 			return err
 		}
 		tag, err := tx.Exec(ctx, `UPDATE projects SET spent_micros = 0, requests = 0 WHERE id = $1`, id)

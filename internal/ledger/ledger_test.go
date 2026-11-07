@@ -151,7 +151,11 @@ func TestAuthenticate(t *testing.T) {
 	if err != nil || k.ID != key.ID || k.Mode != ledger.ModeNaive {
 		t.Fatalf("Authenticate = %+v, %v", k, err)
 	}
-	for _, bad := range []string{"", "hc_short", "sk_" + secret[3:], secret[:34] + "x"} {
+	flipped := secret[:34] + "x"
+	if secret[34] == 'x' {
+		flipped = secret[:34] + "y"
+	}
+	for _, bad := range []string{"", "hc_short", "sk_" + secret[3:], flipped} {
 		if _, err := l.Authenticate(ctx, bad); !errors.Is(err, ledger.ErrInvalidKey) {
 			t.Errorf("Authenticate(%q) err = %v, want ErrInvalidKey", bad, err)
 		}

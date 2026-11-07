@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hardcap</title>
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231c1e22'/%3E%3Crect x='5' y='13' width='15' height='6' rx='1.5' fill='%23d7aa52'/%3E%3Crect x='22' y='7' width='2.5' height='18' rx='1' fill='%23f2f0ea'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="12" width="17" height="8" rx="2" class="brand-fill"/><rect x="22.5" y="5" width="3" height="22" rx="1.2" class="brand-cap"/></svg>
+      <span class="brand-name">Hardcap</span>
+    </div>
+    <p class="tagline">Spend caps for AI APIs</p>
+    <div class="top-actions" id="top-actions" hidden>
+      <span class="status" id="status" role="status"></span>
+      <button type="button" id="run-demo" hidden>Run the demo</button>
+      <button type="button" id="new-project" class="secondary">New project</button>
+      <button type="button" id="disconnect" class="ghost">Disconnect</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="connect" class="connect" hidden>
+      <h1>Connect to this gateway</h1>
+      <p>Paste the admin token Hardcap was started with (<code>HARDCAP_ADMIN_TOKEN</code>).</p>
+      <form id="connect-form">
+        <label for="token">Admin token</label>
+        <div class="row">
+          <input id="token" name="token" type="password" autocomplete="current-password" required>
+          <button type="submit">Connect</button>
+        </div>
+        <p class="form-error" id="connect-error" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="board" hidden>
+      <div class="lanes-head" id="lanes-head" aria-hidden="true">
+        <span></span>
+        <span class="scale"><span class="cap-tag">cap</span></span>
+        <span></span>
+      </div>
+      <div id="lanes" class="lanes" role="list"></div>
+
+      <div id="empty" class="empty" hidden>
+        <h1>No projects yet</h1>
+        <p>A project is a budget: a spending cap shared by its API keys. Every request is checked against it before anything is sent to the AI provider.</p>
+        <div class="row">
+          <button type="button" id="empty-new">New project</button>
+          <button type="button" id="empty-demo" class="secondary" hidden>Set up the demo</button>
+        </div>
+        <p class="hint" id="empty-demo-hint" hidden>The demo creates two projects with a $1.00 cap. One checks its balance and charges afterwards, the way most apps do. The other uses Hardcap. Then 200 clients hit both at once.</p>
+      </div>
+    </section>
+
+    <section id="detail" class="detail" hidden aria-live="off"></section>
+  </main>
+
+  <dialog id="dialog">
+    <form id="dialog-form" method="dialog">
+      <h2 id="dialog-title"></h2>
+      <div id="dialog-body"></div>
+      <p class="form-error" id="dialog-error" role="alert"></p>
+      <div class="dialog-actions">
+        <button type="button" class="ghost" id="dialog-cancel">Cancel</button>
+        <button type="submit" id="dialog-submit"></button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

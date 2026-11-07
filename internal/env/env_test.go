@@ -56,3 +56,18 @@ func TestReportsEveryInvalidValue(t *testing.T) {
 		t.Fatalf("Err = %v, want both bad settings reported", err)
 	}
 }
+
+func TestBool(t *testing.T) {
+	var l env.Loader
+	for v, want := range map[string]bool{"1": true, "TRUE": true, "on": true, "0": false, "no": false} {
+		t.Setenv("HC_TEST_BOOL", v)
+		if got := l.Bool("HC_TEST_BOOL", !want); got != want {
+			t.Errorf("Bool(%q) = %v, want %v", v, got, want)
+		}
+	}
+	t.Setenv("HC_TEST_BOOL", "maybe")
+	l.Bool("HC_TEST_BOOL", false)
+	if l.Err() == nil {
+		t.Error(`"maybe" should be reported as invalid`)
+	}
+}

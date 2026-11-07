@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -67,6 +68,22 @@ func (l *Loader) Int(key string, def int) int {
 		return def
 	}
 	return n
+}
+
+// Bool reads values like "1", "true", "yes" or "on" (and their opposites).
+func (l *Loader) Bool(key string, def bool) bool {
+	v, ok := lookup(key)
+	if !ok {
+		return def
+	}
+	switch strings.ToLower(v) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	}
+	l.fail(key, v, "true or false")
+	return def
 }
 
 // Err returns every invalid setting found so far, or nil if all were fine.

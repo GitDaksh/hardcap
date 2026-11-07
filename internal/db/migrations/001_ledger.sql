@@ -64,6 +64,12 @@ CREATE INDEX usage_events_project_idx ON usage_events (project_id, id DESC);
 -- LOCK ORDER. Every function below that locks rows locks the API key first
 -- and the project second. Because everyone takes locks in the same order,
 -- two requests can never end up waiting on each other forever (a deadlock).
+--
+-- LOCK STRENGTH. Rows are locked FOR NO KEY UPDATE, not FOR UPDATE. Writing
+-- a hold or a receipt makes Postgres check its foreign keys, which takes a
+-- light FOR KEY SHARE lock on the key and project rows. FOR UPDATE conflicts
+-- with that lock and caused real deadlocks under load (the stress tests
+-- caught it). FOR NO KEY UPDATE, the same lock a normal UPDATE takes, doesn't.
 
 -- hardcap_reserve sets money aside for one request, but only if it fits
 -- under both the key's cap and the project's cap. The check and the update
@@ -82,12 +88,12 @@ DECLARE
     v_key     api_keys%ROWTYPE;
     v_project projects%ROWTYPE;
 BEGIN
-    SELECT * INTO v_key FROM api_keys WHERE id = p_key_id FOR UPDATE;
+    SELECT * INTO v_key FROM api_keys WHERE id = p_key_id FOR NO KEY UPDATE;
     IF NOT FOUND OR v_key.revoked_at IS NOT NULL THEN
         RETURN QUERY SELECT 'invalid_key', 0::BIGINT, 0::BIGINT, 0::BIGINT;
         RETURN;
     END IF;
-    SELECT * INTO v_project FROM projects WHERE id = v_key.project_id FOR UPDATE;
+    SELECT * INTO v_project FROM projects WHERE id = v_key.project_id FOR NO KEY UPDATE;
 
     IF v_key.cap_micros IS NOT NULL
        AND v_key.spent_micros + v_key.reserved_micros + p_amount > v_key.cap_micros THEN

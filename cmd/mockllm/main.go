@@ -5,9 +5,12 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/GitDaksh/hardcap/internal/env"
@@ -35,6 +38,9 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           mock.NewHandler(mockCfg),
@@ -45,5 +51,5 @@ func run(logger *slog.Logger) error {
 		"token_delay", mockCfg.TokenDelay,
 		"fail_rate", mockCfg.FailRate,
 		"reply_tokens", mockCfg.ReplyTokens)
-	return serve.Run(srv, logger)
+	return serve.Run(ctx, srv, logger, 10*time.Second)
 }

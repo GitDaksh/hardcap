@@ -11,6 +11,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"net/url"
 	"os"
 	"testing"
 	"time"
@@ -27,40 +28,61 @@ import (
 // seeing each other's data. The schema is dropped when the test ends.
 func Postgres(t testing.TB) *pgxpool.Pool {
 	t.Helper()
-	url := need(t, "HARDCAP_TEST_DATABASE_URL", "postgres://localhost:5432/hardcap_test?sslmode=disable")
+	cfg, err := pgxpool.ParseConfig(PostgresURL(t))
+	if err != nil {
+		t.Fatalf("testenv: %v", err)
+	}
+	cfg.MaxConns = 40
+	pool, err := pgxpool.NewWithConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("testenv: %v", err)
+	}
+	t.Cleanup(pool.Close) // runs before the schema is dropped
+	return pool
+}
+
+// PostgresURL creates a brand-new, fully migrated schema and returns a
+// database URL that points at it, for tests that start Hardcap as a
+// separate process. The schema is dropped when the test ends.
+func PostgresURL(t testing.TB) string {
+	t.Helper()
+	base := need(t, "HARDCAP_TEST_DATABASE_URL", "postgres://localhost:5432/hardcap_test?sslmode=disable")
 	ctx := context.Background()
 
 	schema := "test_" + randomHex(6)
-	admin, err := pgx.Connect(ctx, url)
+	admin, err := pgx.Connect(ctx, base)
 	if err != nil {
 		t.Fatalf("testenv: can't reach Postgres: %v", err)
 	}
 	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
 		t.Fatalf("testenv: %v", err)
 	}
-
-	cfg, err := pgxpool.ParseConfig(url)
-	if err != nil {
-		t.Fatalf("testenv: %v", err)
-	}
-	cfg.ConnConfig.RuntimeParams["search_path"] = schema
-	cfg.MaxConns = 40
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		t.Fatalf("testenv: %v", err)
-	}
 	t.Cleanup(func() {
-		pool.Close()
 		dropCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_, _ = admin.Exec(dropCtx, "DROP SCHEMA "+schema+" CASCADE")
 		_ = admin.Close(dropCtx)
 	})
 
+	// Any unknown URL parameter becomes a Postgres session setting, so
+	// every connection made from this URL works inside the new schema.
+	u, err := url.Parse(base)
+	if err != nil {
+		t.Fatalf("testenv: %v", err)
+	}
+	q := u.Query()
+	q.Set("search_path", schema)
+	u.RawQuery = q.Encode()
+
+	pool, err := pgxpool.New(ctx, u.String())
+	if err != nil {
+		t.Fatalf("testenv: %v", err)
+	}
+	defer pool.Close()
 	if err := db.Migrate(ctx, pool); err != nil {
 		t.Fatalf("testenv: migrate: %v", err)
 	}
-	return pool
+	return u.String()
 }
 
 // Redis returns a client plus a key prefix unique to this test. Keys under
