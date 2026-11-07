@@ -51,9 +51,12 @@ func (d *Demo) Start(ctx context.Context, projectID int64, workers, seconds int,
 		d.mu.Unlock()
 	}
 
-	// A throwaway key, revoked when the stampede ends.
+	// A throwaway key, revoked when the stampede ends. It has no rate
+	// limits, so the stampede shows the budget at work, not the limiter.
+	noLimit := 0
 	key, secret, err := d.ledger.CreateKey(ctx, projectID, ledger.KeyOptions{
 		Name: fmt.Sprintf("stampede %s", time.Now().Format("15:04:05")),
+		RPM:  &noLimit, TPM: &noLimit,
 	})
 	if err != nil {
 		finish()

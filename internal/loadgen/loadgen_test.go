@@ -39,6 +39,23 @@ func TestRunCountsOutcomes(t *testing.T) {
 	}
 }
 
+// When the run's time is up, workers stop sending, but a reply that's
+// halfway through gets to finish instead of being cut off.
+func TestRunLetsRequestsInFlightFinish(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(300 * time.Millisecond)
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer srv.Close()
+
+	var stats Stats
+	Run(context.Background(), Config{URL: srv.URL, Model: "m", Workers: 3, Duration: 100 * time.Millisecond}, &stats)
+
+	if s := stats.Snapshot(); s.Sent != 3 || s.OK != 3 || s.Failed != 0 {
+		t.Fatalf("snapshot = %+v; want each worker's one request to finish", s)
+	}
+}
+
 func TestPercentiles(t *testing.T) {
 	var d []time.Duration
 	for i := 1; i <= 100; i++ {

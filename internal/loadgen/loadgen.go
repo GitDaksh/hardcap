@@ -95,13 +95,19 @@ func pct(sorted []time.Duration, p int) float64 {
 
 // Run sends requests until ctx ends, Duration passes, or every worker has
 // hit StopAfterRefusals.
+//
+// When Duration passes, workers stop sending, but requests already in flight
+// finish normally. Cutting them off would look like clients hanging up
+// mid-reply, which Hardcap charges for in full. Cancel ctx to cut them off.
 func Run(ctx context.Context, cfg Config, stats *Stats) {
 	stats.running.Store(true)
 	defer stats.running.Store(false)
+	var stopAt time.Time
 	if cfg.Duration > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, cfg.Duration)
-		defer cancel()
+		stopAt = time.Now().Add(cfg.Duration)
+	}
+	more := func() bool {
+		return ctx.Err() == nil && (stopAt.IsZero() || time.Now().Before(stopAt))
 	}
 
 	payload := map[string]any{
@@ -125,7 +131,7 @@ func Run(ctx context.Context, cfg Config, stats *Stats) {
 	for range max(cfg.Workers, 1) {
 		wg.Go(func() {
 			refusedInARow := 0
-			for ctx.Err() == nil {
+			for more() {
 				switch stats.one(ctx, client, url, cfg.APIKey, body) {
 				case http.StatusPaymentRequired:
 					refusedInARow++
