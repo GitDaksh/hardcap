@@ -50,12 +50,17 @@ func (l *Ledger) Reserve(ctx context.Context, key Key, requestID, model string, 
 		return h, l.checkNaive(ctx, key, amount)
 	}
 
+	done, err := l.turn(ctx, key.ProjectID)
+	if err != nil {
+		return Hold{}, fmt.Errorf("reserve: %w", err)
+	}
 	var status string
 	var cap, spent, reserved pricing.Micros
-	err := l.pool.QueryRow(ctx,
+	err = l.pool.QueryRow(ctx,
 		`SELECT out_status, out_cap, out_spent, out_reserved FROM hardcap_reserve($1, $2, $3, $4, $5)`,
 		requestID, key.ID, amount, model, ttl.Seconds(),
 	).Scan(&status, &cap, &spent, &reserved)
+	done()
 	if err != nil {
 		return Hold{}, fmt.Errorf("reserve: %w", err)
 	}
@@ -129,17 +134,45 @@ func (l *Ledger) Settle(ctx context.Context, h Hold, s Settlement) error {
 				return fmt.Errorf("settle %s: %w (last error: %v)", h.RequestID, ctx.Err(), err)
 			}
 		}
+		done, turnErr := l.turn(ctx, h.ProjectID)
+		if turnErr != nil {
+			return fmt.Errorf("settle %s: %w (last error: %v)", h.RequestID, turnErr, err)
+		}
 		var status string
 		err = l.pool.QueryRow(ctx,
 			`SELECT hardcap_settle($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 			h.RequestID, h.KeyID, h.ProjectID, h.Model, s.Provider, s.Outcome,
 			s.PromptTokens, s.CompletionTokens, s.UsageKnown, s.Cost, durationMS(s.Duration),
 		).Scan(&status)
+		done()
 		if err == nil {
 			return nil // "settled" or "duplicate": either way the books are right
 		}
 	}
 	return fmt.Errorf("settle %s: %w", h.RequestID, err)
+}
+
+// turn waits until no other budget write to the project is running in this
+// process, and returns the function that ends the turn.
+//
+// Postgres serializes writes to a project's budget anyway, on the project's
+// row lock. But a crowd of transactions queued on one row lock is slow to
+// hand the lock along: in BenchmarkReserveSettle, 32 clients on one project
+// got through 225 requests a second where a single client got through
+// 1,800. Queueing here instead, in memory, means the database sees one
+// transaction per project per gateway, at any number of clients.
+func (l *Ledger) turn(ctx context.Context, projectID int64) (func(), error) {
+	v, ok := l.turns.Load(projectID)
+	if !ok {
+		v, _ = l.turns.LoadOrStore(projectID, make(chan struct{}, 1))
+	}
+	slot := v.(chan struct{})
+	select {
+	case slot <- struct{}{}:
+		return func() { <-slot }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 // SweepExpired charges up to limit expired holds in full and returns how

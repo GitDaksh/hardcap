@@ -18,7 +18,7 @@ import (
 const dollar = pricing.PerDollar
 
 // setup returns a ledger on a fresh database with one project and one key.
-func setup(t *testing.T, cap pricing.Micros, mode ledger.Mode) (*ledger.Ledger, ledger.Project, ledger.Key) {
+func setup(t testing.TB, cap pricing.Micros, mode ledger.Mode) (*ledger.Ledger, ledger.Project, ledger.Key) {
 	t.Helper()
 	l := ledger.New(testenv.Postgres(t))
 	ctx := context.Background()
@@ -423,5 +423,39 @@ func TestRecentUsage(t *testing.T) {
 	events, err := l.RecentUsage(ctx, p.ID, 2)
 	if err != nil || len(events) != 2 || events[0].CompletionTokens != 2 || events[0].Provider != "mock" || events[0].Held != 10_000 {
 		t.Fatalf("RecentUsage = %+v, %v", events, err)
+	}
+}
+
+// BenchmarkReserveSettle measures the ledger's ceiling for one project.
+// Every request locks the same project row twice (hold, then settle), so
+// this is the worst case for contention: one busy project, many clients.
+//
+//	go test ./internal/ledger -run '^$' -bench ReserveSettle
+func BenchmarkReserveSettle(b *testing.B) {
+	for _, clients := range []int{1, 8, 32} {
+		b.Run(fmt.Sprintf("clients=%d", clients), func(b *testing.B) {
+			l, _, k := setup(b, 1_000_000*dollar, ledger.ModeHardcap)
+			ctx := context.Background()
+			var started atomic.Int64
+			var wg sync.WaitGroup
+			b.ResetTimer()
+			for range clients {
+				wg.Go(func() {
+					for started.Add(1) <= int64(b.N) {
+						h, err := l.Reserve(ctx, k, reqID(), "m", 3_000, time.Minute)
+						if err != nil {
+							b.Error(err)
+							return
+						}
+						if err := l.Settle(ctx, h, ledger.Settlement{Outcome: "ok", UsageKnown: true, Cost: 1_000}); err != nil {
+							b.Error(err)
+							return
+						}
+					}
+				})
+			}
+			wg.Wait()
+			b.ReportMetric(float64(b.N)/b.Elapsed().Seconds(), "requests/s")
+		})
 	}
 }

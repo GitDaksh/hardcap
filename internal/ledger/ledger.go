@@ -128,6 +128,7 @@ func (a Audit) Balanced() bool {
 type Ledger struct {
 	pool  *pgxpool.Pool
 	cache keyCache
+	turns sync.Map // project ID -> chan struct{} (capacity 1); see turn
 }
 
 // New returns a Ledger that uses pool.
