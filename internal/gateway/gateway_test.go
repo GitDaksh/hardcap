@@ -449,6 +449,31 @@ func TestProviderCrashMidStream(t *testing.T) {
 	}
 }
 
+// A provider that finishes a reply without saying how many tokens it used
+// still billed for them. Unknown cost is charged at the worst case, the full
+// hold, never at zero.
+func TestReplyWithoutUsageIsChargedTheHold(t *testing.T) {
+	upstream := startUpstream(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\ndata: [DONE]\n\n")
+	})
+	e := start(t, upstream, options{})
+	projectID, secret := e.key(pricing.PerDollar, ledger.ModeHardcap)
+
+	events := readEvents(t, e.post(context.Background(), secret, chat("m", `,"stream":true`)).Body)
+	if len(events) != 2 || events[1] != "[DONE]" {
+		t.Fatalf("events = %q, want the reply passed through as it was", events)
+	}
+	res := e.result()
+	if res.Outcome != gateway.OutcomeUsageMissing || res.Held == 0 || res.Cost != res.Held {
+		t.Fatalf("result = %+v; want outcome usage_missing, charged the full hold", res)
+	}
+	if a := e.audit(projectID); a.Project.Spent != res.Held || a.Project.Reserved != 0 {
+		t.Errorf("audit = %+v; want the hold charged and nothing left held", a)
+	}
+}
+
 func TestProviderErrorsPassThroughAndCostNothing(t *testing.T) {
 	e := start(t, startMock(t, mock.Config{FailRate: 1}), options{})
 	projectID, secret := e.key(pricing.PerDollar, ledger.ModeHardcap)
