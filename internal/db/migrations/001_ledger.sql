@@ -76,6 +76,14 @@ CREATE INDEX usage_events_project_idx ON usage_events (project_id, id DESC);
 -- happen in one function, in one round trip, while holding the row locks, so
 -- no other request can slip in between "check" and "spend". That gap is the
 -- whole bug in naive budget code.
+--
+-- It checks twice. The first look takes no locks: a request that doesn't fit
+-- is refused right there, with nothing locked and nothing written, so there
+-- is nothing to flush to disk. Under a stampede most requests are refusals,
+-- and this keeps them cheap and out of the way of the ones that fit. The
+-- first look can be a moment out of date, but that can only refuse a request
+-- that would just have fit, never let one through: only the second look,
+-- under the locks, ever says yes.
 CREATE FUNCTION hardcap_reserve(
     p_request_id  TEXT,
     p_key_id      BIGINT,
@@ -87,23 +95,37 @@ LANGUAGE plpgsql AS $$
 DECLARE
     v_key     api_keys%ROWTYPE;
     v_project projects%ROWTYPE;
+    v_locked  BOOLEAN := false;
 BEGIN
-    SELECT * INTO v_key FROM api_keys WHERE id = p_key_id FOR NO KEY UPDATE;
-    IF NOT FOUND OR v_key.revoked_at IS NOT NULL THEN
-        RETURN QUERY SELECT 'invalid_key', 0::BIGINT, 0::BIGINT, 0::BIGINT;
-        RETURN;
-    END IF;
-    SELECT * INTO v_project FROM projects WHERE id = v_key.project_id FOR NO KEY UPDATE;
+    LOOP
+        IF v_locked THEN
+            SELECT * INTO v_key FROM api_keys WHERE id = p_key_id FOR NO KEY UPDATE;
+        ELSE
+            SELECT * INTO v_key FROM api_keys WHERE id = p_key_id;
+        END IF;
+        IF NOT FOUND OR v_key.revoked_at IS NOT NULL THEN
+            RETURN QUERY SELECT 'invalid_key', 0::BIGINT, 0::BIGINT, 0::BIGINT;
+            RETURN;
+        END IF;
+        IF v_locked THEN
+            SELECT * INTO v_project FROM projects WHERE id = v_key.project_id FOR NO KEY UPDATE;
+        ELSE
+            SELECT * INTO v_project FROM projects WHERE id = v_key.project_id;
+        END IF;
 
-    IF v_key.cap_micros IS NOT NULL
-       AND v_key.spent_micros + v_key.reserved_micros + p_amount > v_key.cap_micros THEN
-        RETURN QUERY SELECT 'key_cap', v_key.cap_micros, v_key.spent_micros, v_key.reserved_micros;
-        RETURN;
-    END IF;
-    IF v_project.spent_micros + v_project.reserved_micros + p_amount > v_project.cap_micros THEN
-        RETURN QUERY SELECT 'project_cap', v_project.cap_micros, v_project.spent_micros, v_project.reserved_micros;
-        RETURN;
-    END IF;
+        IF v_key.cap_micros IS NOT NULL
+           AND v_key.spent_micros + v_key.reserved_micros + p_amount > v_key.cap_micros THEN
+            RETURN QUERY SELECT 'key_cap', v_key.cap_micros, v_key.spent_micros, v_key.reserved_micros;
+            RETURN;
+        END IF;
+        IF v_project.spent_micros + v_project.reserved_micros + p_amount > v_project.cap_micros THEN
+            RETURN QUERY SELECT 'project_cap', v_project.cap_micros, v_project.spent_micros, v_project.reserved_micros;
+            RETURN;
+        END IF;
+
+        EXIT WHEN v_locked; -- it fit under the locks: take the money
+        v_locked := true;   -- it fit at first look: check again, locked
+    END LOOP;
 
     UPDATE api_keys SET reserved_micros = reserved_micros + p_amount WHERE id = v_key.id;
     UPDATE projects SET reserved_micros = reserved_micros + p_amount WHERE id = v_project.id;

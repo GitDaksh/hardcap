@@ -94,6 +94,44 @@ func TestRefusesWhatDoesntFit(t *testing.T) {
 	}
 }
 
+// A request that can't fit is refused at first look, without waiting for
+// row locks, so a crowd of refusals never queues behind the requests that
+// fit. Here another transaction holds the project's row the whole time.
+func TestRefusalsDontWaitForLocks(t *testing.T) {
+	pool := testenv.Postgres(t)
+	l := ledger.New(pool)
+	ctx := context.Background()
+	p, err := l.CreateProject(ctx, "busy", dollar, ledger.ModeHardcap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, secret, err := l.CreateKey(ctx, p.ID, ledger.KeyOptions{Name: "k"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	k, err := l.Authenticate(ctx, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM projects WHERE id = $1 FOR UPDATE`, p.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	short, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	_, err = l.Reserve(short, k, reqID(), "m", 2*dollar, time.Minute)
+	var be *ledger.BudgetError
+	if !errors.As(err, &be) {
+		t.Fatalf("err = %v, want an immediate BudgetError", err)
+	}
+}
+
 func TestKeyCapIsCheckedToo(t *testing.T) {
 	l, p, _ := setup(t, 10*dollar, ledger.ModeHardcap)
 	ctx := context.Background()
