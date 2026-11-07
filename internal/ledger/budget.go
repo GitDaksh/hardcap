@@ -136,7 +136,10 @@ func (l *Ledger) Settle(ctx context.Context, h Hold, s Settlement) error {
 		}
 		done, turnErr := l.turn(ctx, h.ProjectID)
 		if turnErr != nil {
-			return fmt.Errorf("settle %s: %w (last error: %v)", h.RequestID, turnErr, err)
+			if err != nil {
+				return fmt.Errorf("settle %s: %w (last error: %v)", h.RequestID, turnErr, err)
+			}
+			return fmt.Errorf("settle %s: %w", h.RequestID, turnErr)
 		}
 		var status string
 		err = l.pool.QueryRow(ctx,

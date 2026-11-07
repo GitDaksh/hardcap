@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -41,6 +42,9 @@ func main() {
 
 	if *token == "" {
 		fail("set HARDCAP_ADMIN_TOKEN or pass -token")
+	}
+	if v, err := strconv.ParseFloat(*capUSD, 64); err != nil || v <= 0 {
+		fail("-cap must be a number of dollars above zero, like 1.00")
 	}
 	modes := []string{*mode}
 	if *mode == "both" {
