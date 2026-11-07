@@ -100,8 +100,9 @@ func TestMissingAPIKeySwitchesProviderOff(t *testing.T) {
 	if _, ok := cfg.Models["groq-only"]; ok {
 		t.Error("groq-only has no providers left and should be switched off")
 	}
-	if len(warnings) != 2 {
-		t.Errorf("warnings = %q, want 2", warnings)
+	// The cause (a provider is off) comes before its effect (a model is off).
+	if len(warnings) != 2 || !strings.HasPrefix(warnings[0], `provider "groq"`) || !strings.HasPrefix(warnings[1], `model "groq-only"`) {
+		t.Errorf("warnings = %q, want groq's then groq-only's", warnings)
 	}
 }
 

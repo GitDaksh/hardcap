@@ -25,7 +25,7 @@ providers:
     base_url: https://api.groq.com/openai/v1
     api_key_env: GROQ_API_KEY # Groq is switched off until this is set
     max_tokens_field: max_completion_tokens
-  ollama: # optional: a model running on your own laptop
+  ollama: # optional: models running on your own computer (ollama.com)
     base_url: http://localhost:11434/v1
 
 models:
@@ -43,9 +43,8 @@ models:
         input_per_million: 10.00
         output_per_million: 30.00
 
-  # A real model on Groq's free tier (no card needed). Free-tier limits are
-  # about 30 requests/min, 1,000 requests/day and 8,000 tokens/min. When Groq
-  # rate-limits you, requests fall back to Ollama, if it's running.
+  # Real models on Groq's free tier (no card needed). Free-tier limits are
+  # about 30 requests/min, 1,000 requests/day and 8,000 tokens/min per model.
   gpt-oss-20b:
     default_max_tokens: 1024
     max_output_tokens: 8192
@@ -54,10 +53,6 @@ models:
         model: openai/gpt-oss-20b
         input_per_million: 0.075
         output_per_million: 0.30
-      - provider: ollama
-        model: llama3.2:1b
-        input_per_million: 0
-        output_per_million: 0
 
   gpt-oss-120b:
     default_max_tokens: 1024
@@ -67,3 +62,15 @@ models:
         model: openai/gpt-oss-120b
         input_per_million: 0.15
         output_per_million: 0.60
+
+  # A model on your own computer: free and works offline. Install Ollama,
+  # run `ollama pull llama3.2:1b`, then remove the # from the lines below.
+  # It's free, so its budget never fills up; give it a pretend price if you
+  # want to watch the cap at work.
+  # local:
+  #   default_max_tokens: 512
+  #   routes:
+  #     - provider: ollama
+  #       model: llama3.2:1b
+  #       input_per_million: 0
+  #       output_per_million: 0

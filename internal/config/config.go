@@ -149,7 +149,9 @@ func Parse(data []byte, getenv func(string) string) (*Config, []string, error) {
 		return nil, nil, fmt.Errorf("config: %w", err)
 	}
 
-	var warnings []string
+	// Providers' warnings come first: a model is usually off because one of
+	// its providers is.
+	var providerWarnings, modelWarnings []string
 	if err := cfg.applyDefaults(); err != nil {
 		return nil, nil, err
 	}
@@ -167,7 +169,7 @@ func Parse(data []byte, getenv func(string) string) (*Config, []string, error) {
 			p.APIKey = getenv(p.APIKeyEnv)
 			if p.APIKey == "" {
 				disabled[name] = true
-				warnings = append(warnings, fmt.Sprintf("provider %q is off: set %s to use it", name, p.APIKeyEnv))
+				providerWarnings = append(providerWarnings, fmt.Sprintf("provider %q is off: set %s to use it", name, p.APIKeyEnv))
 			}
 		}
 	}
@@ -189,16 +191,18 @@ func Parse(data []byte, getenv func(string) string) (*Config, []string, error) {
 		m.Routes = usable
 		if len(m.Routes) == 0 {
 			delete(cfg.Models, name)
-			warnings = append(warnings, fmt.Sprintf("model %q is off: none of its providers are on", name))
+			modelWarnings = append(modelWarnings, fmt.Sprintf("model %q is off: none of its providers are on", name))
 		}
 	}
+	slices.Sort(providerWarnings)
+	slices.Sort(modelWarnings)
+	warnings := append(providerWarnings, modelWarnings...)
 	if len(cfg.Models) == 0 {
 		return nil, warnings, errors.New("config: no usable models (check the warnings above)")
 	}
 	for name := range disabled {
 		delete(cfg.Providers, name)
 	}
-	slices.Sort(warnings)
 	return &cfg, warnings, nil
 }
 
