@@ -67,6 +67,11 @@ type Model struct {
 	DefaultMaxTokens int `yaml:"default_max_tokens"`
 	// MaxOutputTokens is the largest max_tokens a request may ask for.
 	MaxOutputTokens int `yaml:"max_output_tokens"`
+	// PromptOverheadTokens is how many tokens a provider may add around the
+	// messages (chat template, built-in system prompt). Hardcap adds it to
+	// the request's size when it bounds the prompt. Default 256.
+	PromptOverheadTokens int  `yaml:"-"`
+	RawPromptOverhead    *int `yaml:"prompt_overhead_tokens"`
 	// Routes are the providers that can serve this model, in the order
 	// they're tried.
 	Routes []Route `yaml:"routes"`
@@ -118,6 +123,7 @@ const (
 	defaultBreakerCooldown  = 30 * time.Second
 	defaultMaxTokens        = 256
 	defaultMaxOutputTokens  = 4096
+	defaultPromptOverhead   = 256
 )
 
 // Load reads and checks the config file at path. getenv looks up provider
@@ -257,6 +263,13 @@ func (m *Model) check(providers map[string]*Provider) error {
 	}
 	if m.DefaultMaxTokens < 1 || m.MaxOutputTokens < m.DefaultMaxTokens {
 		return fmt.Errorf("config: model %q: need 1 <= default_max_tokens <= max_output_tokens", m.Name)
+	}
+	m.PromptOverheadTokens = defaultPromptOverhead
+	if m.RawPromptOverhead != nil {
+		m.PromptOverheadTokens = *m.RawPromptOverhead
+	}
+	if m.PromptOverheadTokens < 0 {
+		return fmt.Errorf("config: model %q: prompt_overhead_tokens can't be negative", m.Name)
 	}
 	if len(m.Routes) == 0 {
 		return fmt.Errorf("config: model %q has no routes", m.Name)

@@ -2,7 +2,9 @@
 # them (tried in order, top to bottom), and what each one costs.
 #
 # Prices are US dollars per million tokens. Before every request, Hardcap
-# holds the worst case it could cost, using the most expensive route.
+# holds the worst case it could cost, using the most expensive route: the
+# request's size in bytes (no token is shorter than a byte) plus
+# prompt_overhead_tokens (default 256) for input, and max_tokens for output.
 
 limits:
   # Rate limits for API keys that don't set their own. 0 means no limit.
@@ -32,6 +34,7 @@ models:
   mock-1:
     default_max_tokens: 64
     max_output_tokens: 4096
+    prompt_overhead_tokens: 0 # the mock adds nothing around your messages
     routes:
       - provider: mock
         input_per_million: 10.00

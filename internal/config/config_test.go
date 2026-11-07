@@ -24,6 +24,7 @@ providers:
 models:
   fast:
     default_max_tokens: 100
+    prompt_overhead_tokens: 0
     routes:
       - provider: groq
         model: openai/gpt-oss-20b
@@ -60,6 +61,10 @@ func TestParseWithEveryProviderOn(t *testing.T) {
 	}
 	if fast.MaxOutputTokens != 4096 {
 		t.Errorf("MaxOutputTokens = %d, want the 4096 default", fast.MaxOutputTokens)
+	}
+	if fast.PromptOverheadTokens != 0 || cfg.Models["groq-only"].PromptOverheadTokens != 256 {
+		t.Errorf("prompt overhead = %d and %d, want 0 (explicit) and 256 (default)",
+			fast.PromptOverheadTokens, cfg.Models["groq-only"].PromptOverheadTokens)
 	}
 	// Worst case across routes: groq's output price, the mock's input price.
 	want := pricing.Price{InputPerMillion: 1_000_000, OutputPerMillion: 300_000}
@@ -120,6 +125,9 @@ models: {m: {default_max_tokens: 500, max_output_tokens: 100, routes: [{provider
 		"no routes": `
 providers: {mock: {base_url: "http://x/v1"}}
 models: {m: {routes: []}}`,
+		"negative overhead": `
+providers: {mock: {base_url: "http://x/v1"}}
+models: {m: {prompt_overhead_tokens: -1, routes: [{provider: mock}]}}`,
 		"bad tokens field": `
 providers: {mock: {base_url: "http://x/v1", max_tokens_field: tokens}}
 models: {m: {routes: [{provider: mock}]}}`,
