@@ -17,6 +17,11 @@ help: ## List these commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-12s %s\n", $$1, $$2}'
 
 setup: ## Create the two local databases (safe to run again)
+	@pg_isready -q || { \
+		echo "Can't reach Postgres on this computer. On a Mac, start it with:"; \
+		echo "  brew services start postgresql@18"; \
+		echo "then wait a few seconds and run make setup again."; \
+		exit 1; }
 	@for db in hardcap hardcap_test; do \
 		if psql -lqt | cut -d'|' -f1 | grep -qw $$db; then echo "database $$db: already there"; \
 		else createdb $$db && echo "database $$db: created"; fi; \

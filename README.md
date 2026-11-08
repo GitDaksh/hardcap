@@ -85,6 +85,8 @@ In a second terminal, `make stampede` runs the same race from the command line a
 
 On Linux, install Go 1.26 or newer, Postgres and Redis your usual way, then pass your database URL: `make run DATABASE_URL=postgres://user:password@localhost:5432/hardcap`.
 
+If `make setup` can't reach Postgres, it isn't running yet: run `brew services start postgresql@18`, wait until `pg_isready` says "accepting connections", and try again. If you already had an older Postgres from Homebrew, stop it first (for example `brew services stop postgresql@14`), because both want port 5432.
+
 ## Use it from your app
 
 Create a project and an API key, in the dashboard (New project, then Create key) or with the admin API:
