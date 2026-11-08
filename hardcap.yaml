@@ -1,0 +1,76 @@
+# Hardcap config: which models clients can ask for, which providers serve
+# them (tried in order, top to bottom), and what each one costs.
+#
+# Prices are US dollars per million tokens. Before every request, Hardcap
+# holds the worst case it could cost, using the most expensive route: the
+# request's size in bytes (no token is shorter than a byte) plus
+# prompt_overhead_tokens (default 256) for input, and max_tokens for output.
+
+limits:
+  # Rate limits for API keys that don't set their own. 0 means no limit.
+  default_rpm: 6000     # requests per minute
+  default_tpm: 5000000  # tokens per minute
+
+routing:
+  attempts_per_route: 2 # tries per provider before falling back to the next
+  breaker_failures: 5   # failures in a row that open a provider's breaker
+  breaker_cooldown: 30s # how long an open breaker skips its provider
+
+providers:
+  mock:
+    base_url: http://localhost:8090/v1
+  mock-backup: # a second mock (port 8091) for the fallback demo
+    base_url: http://localhost:8091/v1
+  groq:
+    base_url: https://api.groq.com/openai/v1
+    api_key_env: GROQ_API_KEY # Groq is switched off until this is set
+    max_tokens_field: max_completion_tokens
+  ollama: # optional: models running on your own computer (ollama.com)
+    base_url: http://localhost:11434/v1
+
+models:
+  # The free fake model. Priced like a premium model so budgets fill up fast
+  # in demos. If the main mock is down, requests fall back to mock-backup.
+  mock-1:
+    default_max_tokens: 64
+    max_output_tokens: 4096
+    prompt_overhead_tokens: 0 # the mock adds nothing around your messages
+    routes:
+      - provider: mock
+        input_per_million: 10.00
+        output_per_million: 30.00
+      - provider: mock-backup
+        input_per_million: 10.00
+        output_per_million: 30.00
+
+  # Real models on Groq's free tier (no card needed). Free-tier limits are
+  # about 30 requests/min, 1,000 requests/day and 8,000 tokens/min per model.
+  gpt-oss-20b:
+    default_max_tokens: 1024
+    max_output_tokens: 8192
+    routes:
+      - provider: groq
+        model: openai/gpt-oss-20b
+        input_per_million: 0.075
+        output_per_million: 0.30
+
+  gpt-oss-120b:
+    default_max_tokens: 1024
+    max_output_tokens: 8192
+    routes:
+      - provider: groq
+        model: openai/gpt-oss-120b
+        input_per_million: 0.15
+        output_per_million: 0.60
+
+  # A model on your own computer: free and works offline. Install Ollama,
+  # run `ollama pull llama3.2:1b`, then remove the # from the lines below.
+  # It's free, so its budget never fills up; give it a pretend price if you
+  # want to watch the cap at work.
+  # local:
+  #   default_max_tokens: 512
+  #   routes:
+  #     - provider: ollama
+  #       model: llama3.2:1b
+  #       input_per_million: 0
+  #       output_per_million: 0

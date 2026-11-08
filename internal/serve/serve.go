@@ -6,19 +6,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 )
 
-// Run serves until Ctrl+C (or SIGTERM, which hosting platforms send before
-// stopping a process), then gives in-flight requests up to 10 seconds to
-// finish instead of cutting them off mid-reply.
-func Run(srv *http.Server, logger *slog.Logger) error {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
+// Run serves until ctx ends (main cancels it on Ctrl+C or SIGTERM, which
+// hosting platforms send before stopping a process). Then it stops taking
+// new connections and gives in-flight requests up to grace to finish,
+// instead of cutting them off mid-reply.
+func Run(ctx context.Context, srv *http.Server, logger *slog.Logger, grace time.Duration) error {
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
 
@@ -28,8 +23,8 @@ func Run(srv *http.Server, logger *slog.Logger) error {
 	case <-ctx.Done():
 	}
 
-	logger.Info("shutting down; letting in-flight requests finish")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	logger.Info("shutting down; letting in-flight requests finish", "grace", grace)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), grace)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		_ = srv.Close() // time's up: cut off whatever is still running

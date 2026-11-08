@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (Go ${{ matrix.go }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        go: [oldstable, stable]
+
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hardcap
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+      redis:
+        image: redis:8-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+
+    env:
+      # Tests get their own schema each, so they share the database safely.
+      HARDCAP_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/hardcap?sslmode=disable
+      HARDCAP_TEST_REDIS_URL: redis://localhost:6379/1
+      # A test that can't reach Postgres or Redis fails here instead of skipping.
+      HARDCAP_REQUIRE_SERVICES: "1"
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: Formatting and go vet
+        run: make check
+
+      - name: Tests, with the race detector
+        run: go test -race -count=1 ./...
+
+      - name: Stampede (fails if a Hardcap project ever goes over its cap)
+        if: matrix.go == 'stable'
+        env:
+          HARDCAP_DATABASE_URL: postgres://postgres:postgres@localhost:5432/hardcap?sslmode=disable
+          HARDCAP_REDIS_URL: redis://localhost:6379/0
+          HARDCAP_ADMIN_TOKEN: ci-admin-token
+        run: |
+          go build -o bin/ ./cmd/...
+          ./bin/mockllm > mock.log 2>&1 &
+          ./bin/hardcap > hardcap.log 2>&1 &
+          for _ in $(seq 100); do curl -sf localhost:8080/readyz > /dev/null && break; sleep 0.2; done
+          ./bin/stampede -workers 100 || { cat hardcap.log; exit 1; }
